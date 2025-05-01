@@ -1,0 +1,46 @@
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Suppose you have 3 result DataFrames: results_simple, results_opt, results_pyomo
+# Each one must contain: 'time', 'strategy', 'action', 'soc_after', 'revenue'
+
+# Example structure:
+# results_simple = pd.DataFrame({...})
+# results_opt = pd.DataFrame({...})
+# results_pyomo = pd.DataFrame({...})
+
+# Combine and calculate cumulative revenue
+for df in [results_simple, results_opt, results_pyomo]:
+    df.reset_index(drop=True, inplace=True)
+
+df_all = pd.concat([results_simple, results_opt, results_pyomo], ignore_index=True)
+df_all["cumulative_revenue"] = df_all.groupby("strategy")["revenue"].cumsum()
+
+# Plot
+sns.set(style="whitegrid")
+fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
+
+# 1. State of Charge
+sns.lineplot(data=df_all, x="time", y="soc_after", hue="strategy", ax=axes[0])
+axes[0].set_title("Évolution du SoC")
+axes[0].set_ylabel("State of Charge")
+
+# 2. Cumulative Revenue
+sns.lineplot(data=df_all, x="time", y="cumulative_revenue", hue="strategy", ax=axes[1])
+axes[1].set_title("Revenus cumulés")
+axes[1].set_ylabel("€ cumulés")
+
+# 3. Action timeline
+palette = {"charge": "blue", "discharge": "red", "idle": "gray"}
+for strategy, group in df_all.groupby("strategy"):
+    colors = group["action"].map(palette)
+    axes[2].scatter(group["time"], [strategy]*len(group), c=colors, s=100, marker='|')
+axes[2].set_title("Actions par stratégie")
+axes[2].set_yticks(["threshold", "optimization", "pyomo"])
+axes[2].set_ylabel("Stratégie")
+axes[2].set_xlabel("Heure")
+
+plt.tight_layout()
+plt.show()
