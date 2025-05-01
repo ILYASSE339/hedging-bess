@@ -122,23 +122,20 @@ def pyomo_optimization_strategy(price_series, current_time, battery, forecast_ho
     - action ("charge", "discharge", "idle")
     """
 
-    # 1. 🔍 Sélectionner les prix pour les heures futures
+    # 1. Sélectionner les prix pour les heures futures
     future_times = [current_time + pd.Timedelta(hours=i) for i in range(forecast_horizon)]
     future_prices = price_series.reindex(future_times, method='nearest')
-
-    # 2. 📦 Créer un modèle Pyomo
+    # 2. Créer un modèle Pyomo
     model = ConcreteModel()
-
-    # 3. 📅 Définir l'ensemble des heures futures
+    # 3. Définir l'ensemble des heures futures
     model.T = RangeSet(0, forecast_horizon-1)
-
-    # 4. 🛠️ Définir les variables de décision
+    # 4. Définir les variables de décision
     # x_charge[t] = 1 si on charge à l'heure t, 0 sinon
     # x_discharge[t] = 1 si on décharge à l'heure t, 0 sinon
     model.x_charge = Var(model.T, domain=Binary)
     model.x_discharge = Var(model.T, domain=Binary)
 
-    # 5. 🎯 Définir la fonction objectif : maximiser les gains
+    # 5. fonction objectif
     def obj_rule(m):
         return sum(
             - future_prices.iloc[t] * m.x_charge[t] + future_prices.iloc[t] * m.x_discharge[t]
@@ -146,7 +143,7 @@ def pyomo_optimization_strategy(price_series, current_time, battery, forecast_ho
         )
     model.obj = Objective(rule=obj_rule, sense=maximize)
 
-    # 6. ⚙️ Contrainte de SoC à chaque heure
+    # 6. Contrainte de SoC à chaque heure
     soc_init = battery.get_soc() * battery.capacity
 
     def soc_constraint(m, t):
@@ -155,20 +152,20 @@ def pyomo_optimization_strategy(price_series, current_time, battery, forecast_ho
         for i in range(t+1):
             soc += battery.power * battery.efficiency * m.x_charge[i]
             soc -= battery.power / battery.efficiency * m.x_discharge[i]
-        return (battery.capacity * battery.soc_min, soc, battery.capacity * battery.soc_max)
+        return (battery.capacity * battery.soc_min, soc, battery.capacity * battery.soc_max) # 3 elements tuple = Between
 
     model.soc_constraints = Constraint(model.T, rule=soc_constraint)
 
-    # 7. 🔀 Contrainte : ne pas charger ET décharger en même temps
+    # 7. Contrainte : ne pas charger ET décharger en même temps
     def exclusive_action(m, t):
         return m.x_charge[t] + m.x_discharge[t] <= 1
     model.exclusive_constraints = Constraint(model.T, rule=exclusive_action)
 
-    # 8. 🚀 Résoudre le problème
-    solver = SolverFactory('glpk')  # ou 'cbc' si tu l'as
+    # 8. Résoudre le problème
+    solver = SolverFactory('glpk')  
     solver.solve(model)
 
-    # 9. 📈 Lire la première action optimale
+    # 9. Lire la première action optimale
     if model.x_charge[0]() == 1:
         return "charge"
     elif model.x_discharge[0]() == 1:
